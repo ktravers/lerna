@@ -177,7 +177,7 @@ const defaults = {
   "update-notifier": true,
   usage: false,
   // NOTABLY DIFFERENT than upstream
-  "user-agent": "@lerna/npm-config/{npm-version} node/{node-version} {platform} {arch} {ci}",
+  "user-agent": "lerna/{npm-version} node/{node-version} {platform} {arch} {ci}",
   userconfig: "~/.npmrc",
   version: false,
   versions: false,

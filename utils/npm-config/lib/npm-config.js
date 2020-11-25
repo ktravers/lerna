@@ -7,10 +7,37 @@ const envReplace = require("@npmcli/config/lib/env-replace.js");
 const log = require("npmlog");
 
 const { defaults, types } = require("./defaults-and-types");
+const { flatOptions } = require("./flat-options");
 
+// (terribly naive implementation, don't blame npm folks)
 // e.g., "/usr/local/lib/node_modules/npm";
 const getNpmPath = () =>
   path.resolve(fs.realpathSync(path.join(path.dirname(process.execPath), "npm")), "../..");
+
+const getProjectScope = (prefix) => {
+  try {
+    /* eslint-disable-next-line global-require, import/no-dynamic-require */
+    const { name } = require(path.resolve(prefix, "package.json"));
+    if (!name || typeof name !== "string") {
+      return "";
+    }
+
+    const split = name.split("/");
+    if (split.length < 2) {
+      return "";
+    }
+
+    const scope = split[0];
+    return /^@/.test(scope) ? scope : "";
+  } catch (er) {
+    return "";
+  }
+};
+
+/* eslint-disable no-underscore-dangle */
+const _flatOptions = Symbol("_flatOptions");
+const _tmpFolder = Symbol("_tmpFolder");
+/* eslint-enable no-underscore-dangle */
 
 /**
  * A wrapper around @npmcli/config's `Config` class that provides "good enough"
@@ -35,6 +62,59 @@ class NpmConfig extends Config {
     });
 
     this.cliConfig = cliConfig;
+
+    // defaults for values set after load()
+    this.modes = {
+      exec: 0o755,
+      file: 0o644,
+      umask: 0o22,
+    };
+  }
+
+  get command() {
+    return this.cliConfig.lernaCommand ? `lerna ${this.cliConfig.lernaCommand}` : this.cliConfig.npmCommand;
+  }
+
+  get flatOptions() {
+    return this[_flatOptions];
+  }
+
+  get tmp() {
+    if (!this[_tmpFolder]) {
+      /* eslint-disable-next-line global-require */
+      const rand = require("crypto").randomBytes(4).toString("hex");
+      this[_tmpFolder] = `lerna-${process.pid}-${rand}`;
+    }
+
+    return path.resolve(this.get("tmp"), this[_tmpFolder]);
+  }
+
+  /**
+   * Wrap superclass method to mimic npm.load() callback operations.
+   */
+  async load() {
+    await super.load();
+
+    const color = this.get("color");
+    /* eslint-disable-next-line no-nested-ternary */
+    this.color = color === "always" ? true : color === false ? false : process.stdout.isTTY;
+
+    const umask = this.get("umask");
+    this.modes = {
+      /* eslint-disable no-bitwise */
+      exec: 0o777 & ~umask,
+      file: 0o666 & ~umask,
+      /* eslint-enable no-bitwise */
+      umask,
+    };
+
+    // we don't guard config.scope lacking an "@" prefix
+    this.projectScope = this.get("scope") || getProjectScope(this.prefix);
+
+    // this is weird upstream circularity (default elsewhere)
+    this.version = this.cliConfig.lernaVersion || this.get("npm-version");
+
+    this[_flatOptions] = flatOptions(this);
   }
 
   /**

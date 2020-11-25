@@ -50,7 +50,7 @@ const buildOmitList = (obj) => {
 // not pulled from the config keys, that's all handled only for the
 // main function which acts on the npm object itself.  Used by the
 // flatOptions generator, and by the publishConfig handling logic.
-const flatten = (obj) => ({
+const flattenConfig = (obj) => ({
   includeStaged: obj["include-staged"],
   preferDedupe: obj["prefer-dedupe"],
   ignoreScripts: obj["ignore-scripts"],
@@ -193,39 +193,37 @@ const flatten = (obj) => ({
   noProxy: obj.noproxy,
 });
 
-// TODO: ugh fix this
-const flatOptions = (npm) =>
-  npm.flatOptions ||
+const flatOptions = (cfg) =>
+  cfg.flatOptions ||
   Object.freeze({
     // flatten the config object
-    ...flatten(npm.config.list[0]),
+    ...flattenConfig(cfg.list[0]),
 
     // Note that many of these do not come from configs or cli flags
     // per se, though they may be implied or defined by them.
     log,
     npmSession,
-    dmode: npm.modes.exec,
-    fmode: npm.modes.file,
-    umask: npm.modes.umask,
+    dmode: cfg.modes.exec,
+    fmode: cfg.modes.file,
+    umask: cfg.modes.umask,
     hashAlgorithm: "sha1", // XXX should this be sha512?
-    color: !!npm.color,
-    projectScope: npm.projectScope,
-    npmVersion: npm.version,
+    color: !!cfg.color,
+    projectScope: cfg.projectScope,
+    npmVersion: cfg.version,
 
-    // npm.command is not set until AFTER flatOptions are defined
-    // so we need to make this a getter.
-    get npmCommand() {
-      return npm.command;
-    },
+    // we don't have fancypants circularity to deal with
+    // (used by npm-registry-fetch)
+    npmCommand: cfg.command,
 
-    tmp: npm.tmp,
-    prefix: npm.prefix,
-    globalPrefix: npm.globalPrefix,
-    localPrefix: npm.localPrefix,
-    npmBin: require.main && require.main.filename,
+    tmp: cfg.tmp,
+    prefix: cfg.prefix,
+    globalPrefix: cfg.globalPrefix,
+    localPrefix: cfg.localPrefix,
+    // nothing fancy for npmBin (used by pacote)
+    npmBin: "npm",
     nodeBin: process.env.NODE || process.execPath,
     get tag() {
-      return npm.config.get("tag");
+      return cfg.get("tag");
     },
   });
 
@@ -260,4 +258,5 @@ function getScopesAndAuths(obj) {
   return scopesAndAuths;
 }
 
-module.exports = Object.assign(flatOptions, { flatten });
+module.exports.flattenConfig = flattenConfig;
+module.exports.flatOptions = flatOptions;
